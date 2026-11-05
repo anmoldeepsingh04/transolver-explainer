@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transolver, Explained</title>
+<meta name="description" content="An interactive walkthrough of Transolver: A Fast Transformer Solver for PDEs on General Geometries (Wu et al., ICML 2024).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<style>
+:root{
+  --bg:#fbfaf7; --surface:#ffffff; --surface-2:#f2f0ea; --border:#e2ded4;
+  --text:#1d1c19; --text-2:#55524a; --text-3:#8a867b;
+  --accent:#2f5bd3; --accent-soft:#e3eafc; --accent-2:#c2410c;
+  --bar:#c9c4b8; --grid:#ebe7de; --code-bg:#f4f2ec;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  --radius:14px;
+  --font:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121316; --surface:#1a1c20; --surface-2:#22252b; --border:#30343c;
+    --text:#ecebe6; --text-2:#b4b2aa; --text-3:#82807a;
+    --accent:#7fa2ff; --accent-soft:#1f2a45; --accent-2:#fb923c;
+    --bar:#4a4e57; --grid:#2a2d33; --code-bg:#16181c;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121316; --surface:#1a1c20; --surface-2:#22252b; --border:#30343c;
+  --text:#ecebe6; --text-2:#b4b2aa; --text-3:#82807a;
+  --accent:#7fa2ff; --accent-soft:#1f2a45; --accent-2:#fb923c;
+  --bar:#4a4e57; --grid:#2a2d33; --code-bg:#16181c;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:17px;line-height:1.65}
+a{color:var(--accent)}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 .5em;letter-spacing:-.01em}
+h2{font-size:1.75rem;margin-top:0}
+h3{font-size:1.2rem;margin-top:1.6em}
+p{margin:0 0 1em}
+code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.1em .35em;border-radius:5px}
+.progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);width:0;z-index:50}
+
+/* layout */
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px;max-width:1240px;margin:0 auto;padding:0 32px}
+nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:36px 0 24px;font-size:.88rem}
+nav.toc .brand{font-weight:700;font-size:1rem;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:s}
+nav.toc li{counter-increment:s}
+nav.toc a{display:block;padding:6px 10px;border-radius:8px;color:var(--text-2);text-decoration:none;border-left:2px solid transparent}
+nav.toc a::before{content:counter(s,decimal-leading-zero) "  ";font-family:var(--mono);font-size:.75rem;color:var(--text-3)}
+nav.toc a:hover{background:var(--surface-2);color:var(--text)}
+nav.toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent)}
+.theme-btn{margin-top:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);border-radius:8px;padding:6px 10px;font:inherit;font-size:.82rem;cursor:pointer}
+main{min-width:0;padding:36px 0 80px}
+section{padding:56px 0;border-bottom:1px solid var(--border)}
+section:last-of-type{border-bottom:none}
+.kicker{font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.lead{font-size:1.15rem;color:var(--text-2);max-width:62ch}
+.prose{max-width:70ch}
+.muted{color:var(--text-2)}
+.small{font-size:.86rem}
+
+/* hero */
+.hero{padding-top:24px}
+.hero h1{font-size:clamp(2rem,4.5vw,3.1rem);letter-spacing:-.02em;margin-bottom:.35em}
+.hero .meta{font-size:.9rem;color:var(--text-3);margin-bottom:22px}
+.hero-viz{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;margin:28px 0 8px}
+.hero-viz figure{margin:0}
+.hero-viz canvas{width:100%;aspect-ratio:44/26;display:block;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.hero-viz figcaption{font-size:.85rem;color:var(--text-2);margin-top:8px;text-align:center}
+.hero-arrow{font-size:1.6rem;color:var(--text-3)}
+.tldr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:28px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.card h4{font-size:.95rem;margin-bottom:.35em}
+.card p{font-size:.92rem;color:var(--text-2);margin:0}
+.stat{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;color:var(--accent)}
+
+/* callouts */
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0;font-size:.94rem}
+.note.warn{border-left-color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 10%,transparent)}
+.eq{overflow-x:auto;padding:6px 0;margin:10px 0}
+
+/* controls */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.controls{display:grid;gap:16px}
+.ctrl label{display:flex;justify-content:space-between;font-size:.86rem;font-weight:600;margin-bottom:4px}
+.ctrl label span{font-family:var(--mono);font-weight:500;color:var(--accent)}
+.ctrl .hint{font-size:.78rem;color:var(--text-3);display:flex;justify-content:space-between}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button,.btn{font:inherit;font-size:.84rem;padding:6px 11px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] .seg button.on{color:#0b1020}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .seg button.on{color:#0b1020}}
+.btn:hover,.seg button:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* playground */
+.pg{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;margin-top:22px}
+.pg-canvas-wrap{position:relative}
+#pgCanvas{width:100%;aspect-ratio:44/26;display:block;border-radius:10px;background:var(--surface-2);cursor:crosshair}
+.legend-bar{display:flex;align-items:center;gap:10px;font-size:.78rem;color:var(--text-2);margin-top:8px;font-family:var(--mono)}
+.legend-bar .grad{flex:1;height:10px;border-radius:5px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+.metric{background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.metric .v{font-family:var(--mono);font-size:1.1rem;font-weight:500}
+.metric .k{font-size:.74rem;color:var(--text-2)}
+.tokens{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tok{display:flex;align-items:center;gap:6px;color:var(--text);font-size:.74rem;font-family:var(--mono);padding:3px 8px 3px 4px;border-radius:999px;border:1px solid var(--border);background:var(--surface);cursor:pointer}
+.tok i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.tok.sel{outline:2px solid var(--accent)}
+#attnCanvas{width:100%;aspect-ratio:1;border-radius:8px;display:block;background:var(--surface-2)}
+.try{counter-reset:t;list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.try li{counter-increment:t;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px 12px 44px;position:relative;font-size:.88rem;color:var(--text-2)}
+.try li::before{content:counter(t);position:absolute;left:12px;top:11px;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:.8rem;display:grid;place-items:center}
+.try li b{color:var(--text)}
+.try li button{margin-top:6px}
+
+/* complexity */
+.cx{display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;margin-top:20px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chips button{font:inherit;font-size:.76rem;padding:4px 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);cursor:pointer}
+.chips button:hover{border-color:var(--accent);color:var(--text)}
+.cxrow{margin-bottom:18px}
+.cxrow .lab{display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:5px}
+.cxrow .lab b{font-family:var(--mono);font-weight:500}
+.cxbar{height:22px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.cxbar div{height:100%;border-radius:6px;transition:width .35s ease}
+.big-ratio{font-size:2.3rem;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1.1}
+
+/* stepper */
+.stepper-diagram svg{width:100%;height:auto;display:block}
+.sd-box rect{fill:var(--surface-2);stroke:var(--border);stroke-width:1.5;transition:all .25s}
+.sd-box text{fill:var(--text-2);font-family:var(--font);font-size:13px}
+.sd-box text.shape{font-family:var(--mono);font-size:12px;fill:var(--text-3)}
+.sd-box.on rect{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2.5}
+.sd-box.on text{fill:var(--text)} .sd-box.on text.shape{fill:var(--accent)}
+.sd-arrow{stroke:var(--text-3);stroke-width:1.5;fill:none}
+.sd-op{fill:var(--text-3);font-size:11px;font-family:var(--mono)}
+.step-nav{display:flex;gap:8px;align-items:center;margin:16px 0}
+.step-dots{display:flex;gap:6px;margin-left:auto}
+.step-dots button{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);font:inherit;font-size:.78rem;cursor:pointer}
+.step-dots button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.step-body{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+.mats{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.mat{font-family:var(--mono);font-size:.78rem}
+.mat .cap{font-family:var(--font);font-size:.78rem;color:var(--text-2);margin-bottom:4px}
+.mat table{border-collapse:separate;border-spacing:2px}
+.mat td,.mat th{padding:4px 7px;text-align:right;border-radius:4px;min-width:44px}
+.mat th{font-weight:500;color:var(--text-3);font-size:.7rem}
+.scale-line{font-size:.84rem;background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-top:12px;color:var(--text-2)}
+.scale-line b{font-family:var(--mono);color:var(--text);font-weight:500}
+
+/* architecture */
+.arch svg{width:100%;max-width:760px;height:auto;display:block;margin:0 auto}
+.a-box{fill:var(--surface);stroke:var(--border);stroke-width:1.5}
+.a-box.hl{fill:var(--accent-soft);stroke:var(--accent)}
+.a-box.soft{fill:var(--surface-2)}
+.a-t{fill:var(--text);font-family:var(--font);font-size:14px;font-weight:600}
+.a-s{fill:var(--text-3);font-family:var(--mono);font-size:11.5px}
+.a-line{stroke:var(--text-3);stroke-width:1.6;fill:none}
+.a-frame{fill:none;stroke:var(--accent);stroke-dasharray:6 5;stroke-width:1.5}
+.a-lbl{fill:var(--accent);font-family:var(--mono);font-size:12px}
+table.data{border-collapse:collapse;width:100%;font-size:.86rem}
+table.data th,table.data td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+table.data th{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);font-weight:600}
+table.data td.num{font-family:var(--mono);text-align:right}
+table.data tr.hl td{background:var(--accent-soft);font-weight:600}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+
+/* code */
+.codebox{position:relative;margin:16px 0}
+.codebox pre{margin:0;background:var(--code-bg);border:1px solid var(--border);border-radius:12px;padding:18px 18px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.6}
+.codebox .copy{position:absolute;top:10px;right:10px}
+.tok-k{color:#8b3fd1} .tok-c{color:var(--text-3);font-style:italic} .tok-s{color:#2a8a4a} .tok-n{color:var(--accent-2)} .tok-f{color:var(--accent)}
+.code-tabs{display:flex;gap:6px;margin-top:10px}
+.map{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px}
+.map div{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:.84rem}
+.map b{font-family:var(--mono);font-size:.8rem;color:var(--accent);display:block}
+
+/* charts */
+.chart{width:100%;min-height:120px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.c-bar{fill:var(--bar)} .c-bar.hl{fill:var(--accent)}
+.c-lbl{fill:var(--text-2);font-family:var(--font);font-size:12px}
+.c-lbl.hl{fill:var(--text);font-weight:700}
+.c-val{fill:var(--text-3);font-family:var(--mono);font-size:11px}
+.c-val.hl{fill:var(--accent);font-weight:500}
+.c-grid{stroke:var(--grid);stroke-width:1}
+.c-axis{fill:var(--text-3);font-family:var(--mono);font-size:11px}
+.c-line{fill:none;stroke-width:2.5}
+.c-line.a{stroke:var(--accent)} .c-line.b{stroke:var(--accent-2)} .c-line.g{stroke:var(--bar)}
+.c-dot.a{fill:var(--accent)} .c-dot.b{fill:var(--accent-2)} .c-dot.g{fill:var(--bar)}
+.c-dash{stroke:var(--accent-2);stroke-dasharray:5 4;stroke-width:1.8}
+.c-note{fill:var(--accent-2);font-family:var(--mono);font-size:11px}
+.c-title{fill:var(--text-2);font-family:var(--font);font-size:12px;font-weight:600}
+.chart-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chart-head h4{margin:0;font-size:1rem}
+.callout-num{font-size:.9rem;color:var(--text-2);margin-top:8px}
+.callout-num b{color:var(--accent)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.bench{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:16px}
+.bench .card{padding:14px 16px}
+.bench .tag{display:inline-block;font-size:.7rem;font-family:var(--mono);padding:2px 7px;border-radius:999px;background:var(--surface-2);color:var(--text-2);margin-bottom:6px}
+.bench .n{font-family:var(--mono);font-size:1.15rem;font-weight:500}
+.legend-inline{display:flex;gap:14px;font-size:.8rem;color:var(--text-2);flex-wrap:wrap}
+.legend-inline i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.qa{display:grid;gap:10px;margin-top:14px}
+details{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:.6em 0 0;color:var(--text-2);font-size:.94rem}
+footer{padding:40px 0 10px;font-size:.84rem;color:var(--text-3)}
+.mobile-nav{display:none}
+
+@media (max-width:1020px){
+  .layout{grid-template-columns:minmax(0,1fr);padding:0 16px;gap:0}
+  nav.toc{display:none}
+  .mobile-nav{display:flex;gap:6px;overflow-x:auto;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:20;border-bottom:1px solid var(--border);margin:0 -16px;padding-left:16px;padding-right:16px}
+  .mobile-nav a{white-space:nowrap;font-size:.8rem;padding:5px 10px;border-radius:999px;background:var(--surface-2);color:var(--text-2);text-decoration:none}
+  .pg,.cx,.step-body{grid-template-columns:minmax(0,1fr)}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .tldr{grid-template-columns:minmax(0,1fr)}
+  .hero-viz{grid-template-columns:minmax(0,1fr)}
+  .hero-arrow{transform:rotate(90deg);text-align:center}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  section{padding:40px 0}
+  h2{font-size:1.45rem}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="layout">
+  <nav class="toc" aria-label="Contents">
+    <div class="brand"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="6" r="3" fill="#2f5bd3"/><circle cx="14" cy="5" r="2.4" fill="#c2410c"/><circle cx="9" cy="14" r="3.4" fill="#2a8a4a"/></svg>Transolver, Explained</div>
+    <ol id="tocList">
+      <li><a href="#top">Overview</a></li>
+      <li><a href="#problem">The problem</a></li>
+      <li><a href="#cost">Why attention is expensive</a></li>
+      <li><a href="#idea">The key idea</a></li>
+      <li><a href="#playground">Playground</a></li>
+      <li><a href="#walkthrough">Step by step</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#code">Implementation</a></li>
+      <li><a href="#theory">Why it works</a></li>
+      <li><a href="#benchmarks">Benchmarks</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#ablation">Ablations</a></li>
+      <li><a href="#scaling">Scaling &amp; OOD</a></li>
+      <li><a href="#takeaways">Takeaways</a></li>
+    </ol>
+    <button class="theme-btn" id="themeBtn" type="button">Toggle light / dark</button>
+  </nav>
+
+  <main>
+  <div class="mobile-nav" id="mobileNav"></div>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top">
+    <div class="kicker">An interactive paper walkthrough</div>
+    <h1>Transolver: attention over <em>physical states</em>, not mesh points</h1>
+    <div class="meta">Wu, Luo, Wang, Wang &amp; Long · Tsinghua University · ICML 2024 · <a href="https://arxiv.org/abs/2402.02366">arXiv:2402.02366</a> · <a href="https://github.com/thuml/Transolver">code</a></div>
+    <p class="lead">A physics simulation describes a field (pressure, velocity, stress) on tens of thousands of mesh points. Transformers are a good fit for learning these fields, but standard attention compares every point with every other point. Transolver first groups the points into a few <b>learned "slices"</b> of similar physical state and then runs attention only between those groups.</p>
+
+    <div class="hero-viz">
+      <figure><canvas id="heroA" aria-label="Irregular mesh points around a cylinder"></canvas><figcaption>What a standard Transformer attends over: <b id="heroN">N</b> individual mesh points</figcaption></figure>
+      <div class="hero-arrow" aria-hidden="true">→</div>
+      <figure><canvas id="heroB" aria-label="Mesh points coloured by learned slice"></canvas><figcaption>What Transolver attends over: <b>M = 8</b> physical states (slices)</figcaption></figure>
+    </div>
+    <p class="small muted">Illustration: ideal flow around a cylinder. Colours on the right group points with similar pressure and velocity, so the front and rear stagnation points share a slice even though they are far apart.</p>
+
+    <div class="tldr">
+      <div class="card"><div class="stat">O(N)</div><h4>Linear cost</h4><p>Attention runs on M ≪ N tokens, so the cost is O(NMC + M²C) instead of O(N²C).</p></div>
+      <div class="card"><div class="stat">22%</div><h4>Average error reduction</h4><p>Best result on all six standard PDE benchmarks, compared with the previous best model on each.</p></div>
+      <div class="card"><div class="stat">Any mesh</div><h4>Geometry-general</h4><p>Slices are computed point by point, so point clouds, structured meshes and unstructured meshes all work.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section id="problem">
+    <div class="kicker">01 · Setting the stage</div>
+    <h2>The problem: learning to solve PDEs on meshes</h2>
+    <div class="prose">
+      <p>Partial differential equations (PDEs) govern airflow over a car, stress in a material and fluid moving through rock. Numerical solvers discretise the domain into a <b>mesh</b> and solve on it. For complex shapes this can take <b>hours or days</b> per design.</p>
+      <p><b>Neural PDE solvers</b> (also called <em>neural operators</em>) learn the mapping from inputs to the solution from data. Once trained, they predict a new solution in a fraction of a second.</p>
+      <p>Formally, a domain <span>\(\Omega\)</span> is discretised into <span>\(N\)</span> mesh points <span>\(g \in \mathbb{R}^{N\times C_g}\)</span>, optionally with observed quantities <span>\(u \in \mathbb{R}^{N\times C_u}\)</span>. The model must predict the target physical quantity <b>at every mesh point</b>.</p>
+    </div>
+    <div class="grid2" style="margin-top:18px">
+      <div class="card"><h4>Example: car design (Shape-Net Car)</h4><p>Input: the car's mesh (32,186 points: positions, signed distance, normals). Output: surface pressure and surrounding air velocity, from which the <b>drag coefficient</b> is computed.</p></div>
+      <div class="card"><h4>Example: airfoil design (AirfRANS)</h4><p>Input: an airfoil shape, Reynolds number and angle of attack (32,000 points). Output: velocity and pressure fields, from which the <b>lift coefficient</b> is computed.</p></div>
+    </div>
+    <h3>Two challenges the paper identifies</h3>
+    <div class="grid2">
+      <div class="card"><h4>① Efficiency</h4><p>Tens of thousands of irregularly placed points. Standard attention has <b>quadratic</b> cost in N and quickly runs out of GPU memory.</p></div>
+      <div class="card"><h4>② Learning the right correlations</h4><p>Physics involves intricate, long-range interactions. Learning them <b>directly between massive numbers of individual points</b> is hard. Linear-attention variants fix the cost, but their attention tends towards uniform and carries little information (see Table 5).</p></div>
+    </div>
+    <p class="muted small" style="margin-top:14px">ViT-style patches, which group nearby pixels, don't help either: regular square patches don't fit unstructured geometry, and they group points by <em>location</em> rather than by <em>physics</em>.</p>
+  </section>
+
+  <!-- ============ COST ============ -->
+  <section id="cost">
+    <div class="kicker">02 · Interactive</div>
+    <h2>How expensive is attention on a mesh?</h2>
+    <p class="prose">Standard self-attention forms an N×N matrix of scores. Physics-Attention forms an N×M matrix of slice weights plus an M×M attention matrix between tokens. Move the sliders, or pick a benchmark from the paper, to compare the two.</p>
+    <div class="cx">
+      <div class="panel controls">
+        <div class="ctrl">
+          <label>Mesh points N <span id="cxNv"></span></label>
+          <input type="range" id="cxN" min="2" max="6.3" step="0.01" value="4.507">
+          <div class="chips" id="cxChips"></div>
+        </div>
+        <div class="ctrl">
+          <label>Slices M <span id="cxMv"></span></label>
+          <input type="range" id="cxM" min="0" max="10" step="1" value="5">
+          <div class="hint"><span>1</span><span>1024</span></div>
+        </div>
+        <div class="ctrl">
+          <label>Channels C <span id="cxCv"></span></label>
+          <div class="seg" id="cxC"><button data-v="128">128</button><button data-v="256" class="on">256</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="cxrow"><div class="lab"><span>Standard attention ≈ N²·C operations</span><b id="cxStd"></b></div><div class="cxbar"><div id="cxStdBar" style="background:var(--bar)"></div></div></div>
+        <div class="cxrow"><div class="lab"><span>Physics-Attention ≈ N·M·C + M²·C</span><b id="cxPhy"></b></div><div class="cxbar"><div id="cxPhyBar" style="background:var(--accent)"></div></div></div>
+        <div class="cxrow"><div class="lab"><span>N×N score matrix (fp32, one head, one layer)</span><b id="cxMemStd"></b></div><div class="cxbar"><div id="cxMemStdBar" style="background:var(--bar)"></div></div></div>
+        <div class="cxrow"><div class="lab"><span>N×M slice-weight matrix (fp32, one head, one layer)</span><b id="cxMemPhy"></b></div><div class="cxbar"><div id="cxMemPhyBar" style="background:var(--accent)"></div></div></div>
+        <div style="display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;margin-top:6px">
+          <div><div class="big-ratio" id="cxRatio"></div><div class="small muted">fewer operations</div></div>
+          <p class="small muted" style="margin:0;max-width:44ch">Bars use a log scale. These are rough operation counts that ignore constants and the feedforward layers. In the paper, a plain Transformer runs <b>out of memory</b> on Darcy beyond 7,225 points, while Transolver runs at 168,921 points (Table 10).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ IDEA ============ -->
+  <section id="idea">
+    <div class="kicker">03 · The core idea</div>
+    <h2>Learn the physical states hidden behind the mesh</h2>
+    <div class="prose">
+      <p>The key observation is that the mesh is only a <em>finite sampling</em> of an underlying continuous physical field. Many points behave similarly. On a moving car, the surface splits into a few physically consistent regions such as the <b>front</b>, the <b>bevel</b> and the <b>back</b>.</p>
+      <p>Transolver therefore <b>softly assigns every mesh point to M learnable slices</b>. Points in a similar physical state end up in the same slice. Each slice is summarised into one <b>physics-aware token</b>, and attention runs between these M tokens.</p>
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <div class="card"><h4>Slices ≠ spatial patches</h4><p>Classical domain decomposition (e.g. in FEM) cuts the mesh into local regions by hand. Learned slices can join <b>distant</b> points. In the paper (Fig. 1e) the car's windshield, licence plate and headlights fall into the same slice because they all face the oncoming wind, which matters for drag.</p></div>
+      <div class="card"><h4>Why do slices become "physical"?</h4><p>Slice weights are computed from each point's features, so points with similar features get similar weights. Training then sharpens this: tokens that mix different physical states make the attention between tokens less useful, which raises the loss (Remark 3.1).</p></div>
+    </div>
+    <h3>The four equations of Physics-Attention</h3>
+    <div class="grid2">
+      <div class="card"><h4>① Slice: soft assignment (Eq. 1)</h4><div class="eq">$$w_i = \mathrm{Softmax}\big(\mathrm{Project}(x_i)\big)\in\mathbb{R}^{1\times M}$$</div><p>A point-wise linear layer maps C channels to M scores. The softmax runs over the slices, so each row sums to 1 (Σ<sub>j</sub> w<sub>i,j</sub> = 1) and assignments stay <b>low-entropy</b> (sharp).</p></div>
+      <div class="card"><h4>② Aggregate: one token per slice (Eq. 2)</h4><div class="eq">$$z_j = \frac{\sum_{i=1}^{N} w_{i,j}\,x_i}{\sum_{i=1}^{N} w_{i,j}}\in\mathbb{R}^{1\times C}$$</div><p>Each token is the weighted average of the features of the points in its slice.</p></div>
+      <div class="card"><h4>③ Attend: between tokens (Eq. 3)</h4><div class="eq">$$q,k,v=\mathrm{Linear}(z),\quad z'=\mathrm{Softmax}\!\Big(\tfrac{qk^\top}{\sqrt{C}}\Big)v$$</div><p>Ordinary attention, but over M physical states instead of N points, so the attention matrix is only M×M.</p></div>
+      <div class="card"><h4>④ Deslice: back to points (Eq. 4)</h4><div class="eq">$$x'_i = \sum_{j=1}^{M} w_{i,j}\,z'_j$$</div><p>Each point gets back a mix of the updated tokens, weighted by the same slice weights.</p></div>
+    </div>
+    <div class="note">Total cost: <b>\(O(NMC + M^2C)\)</b>. With M fixed and M ≪ N, this is <b>linear in the number of mesh points</b>. Multiple heads split the channels into subspaces, as in a standard Transformer.</div>
+  </section>
+
+  <!-- ============ PLAYGROUND ============ -->
+  <section id="playground">
+    <div class="kicker">04 · Interactive</div>
+    <h2>Physics-Attention playground</h2>
+    <p class="prose">This playground runs Eq. 1, 2 and 4 live in your browser. The field is <b>ideal (potential) flow around a cylinder</b>, which has an exact formula, so no solver is needed. Each point's features are its position plus its physics (pressure coefficient C<sub>p</sub> and velocity). Click a point to see its slice.</p>
+    <div class="pg">
+      <div class="panel">
+        <div class="seg" id="pgView" style="margin-bottom:12px">
+          <button data-v="field">Physical field C<sub>p</sub></button>
+          <button data-v="slices" class="on">Slices (dominant)</button>
+          <button data-v="slice">One slice's weights</button>
+          <button data-v="recon">Slice → deslice</button>
+          <button data-v="error">|Error|</button>
+        </div>
+        <div class="pg-canvas-wrap"><canvas id="pgCanvas" aria-label="Playground canvas"></canvas></div>
+        <div class="legend-bar" id="pgLegend"></div>
+        <div class="metrics">
+          <div class="metric"><div class="v" id="mN"></div><div class="k">mesh points N</div></div>
+          <div class="metric"><div class="v" id="mM"></div><div class="k">slices / tokens M</div></div>
+          <div class="metric"><div class="v" id="mH"></div><div class="k">assignment entropy (0 sharp, 1 uniform)</div></div>
+          <div class="metric"><div class="v" id="mE"></div><div class="k">slice→deslice rel. L2 error</div></div>
+        </div>
+        <div class="small muted" style="margin-top:12px">Tokens <span class="muted">(click one to show its slice; numbers are mean C<sub>p</sub> and share of points)</span></div>
+        <div class="tokens" id="pgTokens"></div>
+      </div>
+      <div class="panel controls">
+        <div class="ctrl"><label>Number of slices M <span id="pgMv"></span></label><input type="range" id="pgM" min="0" max="6" step="1" value="3"><div class="hint"><span>1</span><span>64</span></div></div>
+        <div class="ctrl"><label>Slices based on <span id="pgAv"></span></label><input type="range" id="pgA" min="0" max="1" step="0.05" value="0.85"><div class="hint"><span>position only</span><span>physics only</span></div></div>
+        <div class="ctrl"><label>Softmax temperature τ <span id="pgTv"></span></label><input type="range" id="pgT" min="-2" max="0.5" step="0.05" value="-0.8"><div class="hint"><span>sharp</span><span>uniform</span></div></div>
+        <div class="ctrl"><label>Mesh</label><div class="seg"><button class="btn" id="pgResample" type="button">Drop 50% of points</button><button class="btn" id="pgReset" type="button">Full mesh</button></div></div>
+        <div>
+          <div class="small" style="font-weight:600;margin-bottom:6px">Attention between tokens (Eq. 3), M×M</div>
+          <canvas id="attnCanvas" aria-label="Token attention heatmap"></canvas>
+          <div class="small muted" style="margin-top:6px">Row j shows how much token j attends to each other token. Here q = k = the token features; in the real model they come from learned linear layers.</div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="try">
+      <li><b>One slice = global pooling.</b> Set M = 1. Every point gets the same value back. The paper's ablation shows a serious performance drop for M = 1. <br><button class="btn" data-preset="m1">Try it</button></li>
+      <li><b>Far-apart points, same state.</b> Slide towards <em>physics</em>. The front and rear stagnation points (high C<sub>p</sub>) share a slice, like the windshield and licence plate in the paper. <br><button class="btn" data-preset="phys">Try it</button></li>
+      <li><b>Position-only slices look like patches.</b> Slide to <em>position only</em>. The slices become spatial regions, similar to the "regular squares" baseline that performs worse in the paper. <br><button class="btn" data-preset="pos">Try it</button></li>
+      <li><b>Why use a softmax?</b> Raise τ. Assignments go uniform, entropy approaches 1 and all tokens look alike. Sharp slices give informative tokens. <br><button class="btn" data-preset="soft">Try it</button></li>
+      <li><b>Any mesh works.</b> Drop half the points. The same projection still finds the same physical states, as in the paper's Fig. 5 (50% of the Elasticity mesh resampled). <br><button class="btn" data-preset="resample">Try it</button></li>
+      <li><b>More slices, finer states.</b> Open "Slice → deslice" and increase M. The field rebuilt from only M tokens improves quickly, then levels off. <br><button class="btn" data-preset="recon">Try it</button></li>
+    </ol>
+    <div class="note warn small"><b>Honest caveat:</b> this is an illustration, not a trained Transolver. In the paper, <code>Project()</code> is a <em>trained</em> linear layer acting on learned deep features. Here its weights come from k-means on the features. The softmax of <span>\(-\lVert f-c_j\rVert^2/\tau\)</span> equals the softmax of a linear function of f (the \(\lVert f\rVert^2\) term cancels), so this is still exactly Eq. 1, just with weights chosen by hand instead of by gradient descent.</div>
+  </section>
+
+  <!-- ============ WALKTHROUGH ============ -->
+  <section id="walkthrough">
+    <div class="kicker">05 · Worked example</div>
+    <h2>One Physics-Attention pass, with real numbers</h2>
+    <p class="prose">A tiny mesh: <b>N = 6</b> points, <b>C = 2</b> feature channels and <b>M = 2</b> slices. Step through the computation; every number below is computed live. Use "New numbers" to generate another random example.</p>
+    <div class="panel">
+      <div class="stepper-diagram" id="stepDiagram"></div>
+      <div class="step-nav">
+        <button class="btn" id="stepPrev" type="button">← Back</button>
+        <button class="btn primary" id="stepNext" type="button">Next →</button>
+        <button class="btn" id="stepRand" type="button">New numbers</button>
+        <div class="step-dots" id="stepDots"></div>
+      </div>
+      <div class="step-body">
+        <div>
+          <h3 id="stepTitle" style="margin-top:0"></h3>
+          <div id="stepText" class="muted"></div>
+          <div class="eq" id="stepEq"></div>
+          <div class="scale-line" id="stepScale"></div>
+        </div>
+        <div class="mats" id="stepMats"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section id="architecture">
+    <div class="kicker">06 · The full model</div>
+    <h2>Transolver = a Transformer with Physics-Attention</h2>
+    <p class="prose">The rest of the model is a standard pre-norm Transformer. Inputs are embedded by a linear layer, passed through L layers, and projected to the outputs. The only change is that <b>self-attention is replaced by Physics-Attention</b>.</p>
+    <div class="arch panel" id="archSvg"></div>
+    <div class="eq">$$\hat{x}^{l} = \text{Physics-Attn}\big(\mathrm{LayerNorm}(x^{l-1})\big) + x^{l-1},\qquad x^{l} = \mathrm{FeedForward}\big(\mathrm{LayerNorm}(\hat{x}^{l})\big) + \hat{x}^{l}$$</div>
+    <p class="muted small">with \(x^0 = \mathrm{Linear}(\mathrm{Concat}(g,u))\) and a final linear projection producing the predicted fields (Eq. 6).</p>
+    <h3>Configurations used in the paper (Table 8)</h3>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Benchmark</th><th>Loss</th><th>Epochs</th><th>LR</th><th>Optimizer</th><th>Batch</th><th>Layers L</th><th>Heads</th><th>Channels C</th><th>Slices M</th></tr></thead>
+      <tbody id="cfgBody"></tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:8px"><code>Project()</code> is a single linear layer for unstructured inputs (Elasticity, Shape-Net Car, AirfRANS) and a 3×3 convolution for structured meshes and grids. Training settings follow earlier work, without extra tuning. All runs use one NVIDIA A100 and are repeated three times.</p>
+  </section>
+
+  <!-- ============ CODE ============ -->
+  <section id="code">
+    <div class="kicker">07 · Implementation</div>
+    <h2>From equations to code</h2>
+    <p class="prose">A compact PyTorch sketch that follows the paper's equations line by line. It isn't the official implementation (see <a href="https://github.com/thuml/Transolver">thuml/Transolver</a>), but the shapes and operations match Eq. 1–6.</p>
+    <div class="code-tabs seg" id="codeTabs"><button data-v="attn" class="on">PhysicsAttention</button><button data-v="model">Transolver model</button><button data-v="train">Loss &amp; training</button></div>
+    <div class="codebox"><button class="btn copy" id="copyBtn" type="button">Copy</button><pre id="codePre"></pre></div>
+    <div class="map" id="codeMap"></div>
+  </section>
+
+  <!-- ============ THEORY ============ -->
+  <section id="theory">
+    <div class="kicker">08 · Theory &amp; evidence</div>
+    <h2>Why should this work?</h2>
+    <h3 style="margin-top:0">1 · Attention as a learnable integral operator</h3>
+    <div class="prose">
+      <p>Neural operators update a field layer by layer with a <b>kernel integral</b>, so each point is influenced by every other point in the domain:</p>
+      <div class="eq">$$\mathcal{G}(u)(g^*) = \int_{\Omega} \kappa(g^*, \xi)\, u(\xi)\, d\xi$$</div>
+      <p>Earlier work (Cao 2021; Kovachki et al. 2023) showed that <b>standard attention is a Monte-Carlo estimate</b> of this integral, using the N mesh points as samples (Lemma A.1):</p>
+      <div class="eq">$$\mathcal{G}(u)(g^*) \approx \sum_{i=1}^{N} \frac{\exp\!\big(W_q u(g^*)\,(W_k u(g_i))^\top\big)}{\sum_{j}\exp\!\big(W_q u(g_j)\,(W_k u(g_i))^\top\big)}\, W_v u(g_i)$$</div>
+      <p><b>Theorem 3.4</b> says Physics-Attention also approximates this integral. It changes the variable of integration from the mesh domain Ω to a <b>slice domain Ω<sub>s</sub></b>. The token values are the continuous version of Eq. 2,</p>
+      <div class="eq">$$u_s(\xi_s) = \frac{\int_\Omega w_{\xi,\xi_s}\,u(\xi)\,d\xi}{\int_\Omega w_{\xi,\xi_s}\,d\xi},$$</div>
+      <p>and attention between the M tokens approximates the integral over Ω<sub>s</sub>. So Transolver remains a valid neural operator while attending over far fewer "integration points".</p>
+      <div class="note warn small">The proof assumes a countable domain (to build a bijection between Ω and Ω<sub>s</sub>, Lemma A.3) and smooth slice weights (to make it a diffeomorphism). It shows the design is <em>consistent</em> with operator learning; it gives no approximation-error bounds.</div>
+    </div>
+    <h3>2 · Attention between tokens is sharper (Table 5)</h3>
+    <div class="grid2">
+      <div>
+        <p class="muted">The paper measures how far the learned attention weights are from a uniform distribution, using KL divergence. Higher means more informative attention. Linear attention over mesh points (Galerkin Transformer) is close to uniform; attention between slice tokens is not.</p>
+        <p class="muted small">Related evidence: replacing learned slices with <b>fixed 4×4 regular squares</b> worsens results on every benchmark, even on Darcy, which is a regular grid (0.0059 → 0.0088).</p>
+      </div>
+      <div class="panel"><div class="chart" id="klChart"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ BENCHMARKS ============ -->
+  <section id="benchmarks">
+    <div class="kicker">09 · Experimental setup</div>
+    <h2>Eight benchmarks, four kinds of geometry</h2>
+    <p class="prose">Six standard benchmarks (from FNO and geo-FNO) plus two industrial design tasks, covering solid mechanics, fluids and porous flow. The paper compares against more than 20 baselines: neural operators (FNO, U-NO, LSM…), Transformer solvers (GNOT, ONO, Galerkin…) and geometric deep models (PointNet, GraphSAGE, MeshGraphNet…).</p>
+    <div class="bench" id="benchGrid"></div>
+    <p class="small muted" style="margin-top:14px"><b>Metric:</b> relative L2 error \(\lVert u-\hat u\rVert / \lVert u\rVert\) (lower is better). For car and airfoil design the paper also reports the error of the drag/lift coefficient and <b>Spearman's ρ</b>, which measures whether the model ranks designs in the right order. ρ is what matters for shape optimisation.</p>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="results">
+    <div class="kicker">10 · Main results</div>
+    <h2>State of the art across the board</h2>
+    <div class="panel">
+      <div class="chart-head"><h4>Standard benchmarks: relative L2 (Table 2)</h4><div class="seg" id="t2Tabs"></div></div>
+      <div class="chart" id="t2Chart"></div>
+      <div class="callout-num" id="t2Note"></div>
+    </div>
+    <div class="panel" style="margin-top:20px">
+      <div class="chart-head"><h4>Practical design tasks (Table 3)</h4><div class="seg" id="t3Tabs"></div></div>
+      <div class="chart" id="t3Chart"></div>
+      <div class="callout-num" id="t3Note"></div>
+    </div>
+    <div class="grid2" style="margin-top:20px">
+      <div class="card"><h4>Efficiency (Fig. 6)</h4><p>On Elasticity, Transolver beats the second-best model, GNOT, with <b>25.6% lower error</b> (0.0064 vs 0.0086), <b>5× fewer parameters</b> and <b>1.3× faster training</b>. On the large Shape-Net Car mesh it is also faster than the linear-attention models Galerkin Transformer and OFormer.</p></div>
+      <div class="card"><h4>Where it helps most (Fig. 7)</h4><p>Error maps show the largest gains at <b>boundaries and material junctions</b>: the extrusion zones in Elasticity, the medium boundaries in Darcy and the curved regions of the car surface, where physical interactions are the most intricate.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ ABLATION ============ -->
+  <section id="ablation">
+    <div class="kicker">11 · Ablations</div>
+    <h2>How many slices do you need?</h2>
+    <p class="prose">The number of slices M is Transolver's main design choice. The paper sweeps M from 1 to 1024 on all six standard benchmarks (Table 9).</p>
+    <div class="panel">
+      <div class="chart-head"><h4>Relative L2 vs. number of slices M</h4><div class="seg" id="abTabs"></div></div>
+      <div class="legend-inline"><span><i style="background:var(--accent)"></i>learned slices</span><span><i style="background:var(--accent-2)"></i>fixed 4×4 regular squares</span></div>
+      <div class="chart" id="abChart"></div>
+      <div class="callout-num" id="abNote"></div>
+    </div>
+    <div class="grid2" style="margin-top:20px">
+      <div class="panel"><div class="chart-head"><h4>Cost vs. M (1024 points, batch 1)</h4></div><div class="chart" id="abCost"></div></div>
+      <div class="prose">
+        <h3 style="margin-top:0">What the ablation shows</h3>
+        <ul class="muted">
+          <li><b>M = 1</b> reduces Physics-Attention to <b>global pooling</b>, and performance drops sharply.</li>
+          <li>Accuracy generally improves up to roughly <b>M = 96–256</b>.</li>
+          <li><b>Very large M</b> (512, 1024) gets worse again: the physical domain becomes "seriously fragmented" into too many tokens.</li>
+          <li><b>Learned slices beat fixed regular squares</b> on every benchmark.</li>
+          <li>The paper uses M = 64 with C = 128 and M = 32 with C = 256, and calls M "easy to tune" between 32 and 256.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCALING ============ -->
+  <section id="scaling">
+    <div class="kicker">12 · Scaling &amp; generalisation</div>
+    <h2>Larger meshes, unseen conditions</h2>
+    <div class="grid2">
+      <div class="panel">
+        <div class="chart-head"><h4>Resolution scaling on Darcy (Table 10)</h4></div>
+        <div class="legend-inline"><span><i style="background:var(--accent)"></i>Transolver</span><span><i style="background:var(--bar)"></i>Plain Transformer</span></div>
+        <div class="chart" id="resChart"></div>
+        <p class="small muted">The plain Transformer runs out of memory beyond 7,225 points. Transolver stays at ≈0.006 error up to 168,921 points (a 411×411 grid). The paper also shows gains from 5× more training data and from more layers (Fig. 8).</p>
+      </div>
+      <div class="panel">
+        <div class="chart-head"><h4>Out-of-distribution airfoils (Table 6)</h4><div class="seg" id="oodTabs"></div></div>
+        <div class="chart" id="oodChart"></div>
+        <p class="small muted">The test airfoils use Reynolds numbers or angles of attack <b>outside</b> the training range. Transolver has the lowest lift-coefficient error and a rank correlation ρ<sub>L</sub> ≈ 0.99 in both settings.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAKEAWAYS ============ -->
+  <section id="takeaways">
+    <div class="kicker">13 · Wrap-up</div>
+    <h2>Takeaways</h2>
+    <div class="tldr">
+      <div class="card"><h4>1 · Change what attention sees</h4><p>Don't attend over N mesh points. Attend over M learned <b>physical states</b>: slice → aggregate → attend → deslice.</p></div>
+      <div class="card"><h4>2 · Linear and mesh-agnostic</h4><p>The cost is O(NMC + M²C), and the point-wise projection works on point clouds, structured meshes and unstructured meshes.</p></div>
+      <div class="card"><h4>3 · Strong empirical results</h4><p>Best on all eight benchmarks: a 22% average gain on the standard six, and better drag and lift ranking for real design tasks.</p></div>
+    </div>
+    <h3>Questions worth discussing</h3>
+    <p class="muted small">Each question points to evidence in the paper itself.</p>
+    <div class="qa">
+      <details><summary>Are the slices really "physical states"?</summary><p>The evidence is mainly visual (Fig. 1, Fig. 5, Appendix D) plus the intuition in Remark 3.1. Nothing in the loss requires slices to be physical; they emerge because sharp, meaningful slices lower the prediction error. How would you test this quantitatively?</p></details>
+      <details><summary>When does the speed advantage actually appear?</summary><p>The ablation's efficiency numbers use only 1,024 points. There, time per epoch barely changes from M = 1 to M = 1024 (37.8 → 40.5 s). The linear-complexity benefit matters at large N, as Table 10 and the Shape-Net Car comparison show.</p></details>
+      <details><summary>Is M = 1 just global pooling, and is the model then just pooling?</summary><p>Yes: with one slice, every point receives the same global token. That variant performs much worse (e.g. 0.0148 vs 0.0064 on Elasticity), which suggests the interaction between several physical states matters.</p></details>
+      <details><summary>Why does a very large M hurt?</summary><p>The authors suggest the physical domain becomes fragmented, giving many noisy tokens to attend over. Each point's output is also rebuilt from only M tokens per head, so M sets a limit on representational capacity in both directions.</p></details>
+      <details><summary>How strong is the theory?</summary><p>Theorem 3.4 places Physics-Attention inside the integral-operator framework, but it relies on assumptions (a countable domain, smooth slice weights) and gives no error bounds.</p></details>
+      <details><summary>What about time-dependent dynamics?</summary><p>Most benchmarks are steady-state mappings from input to field. Only Plasticity and Navier–Stokes involve time. How would Transolver behave over long autoregressive rollouts?</p></details>
+      <details><summary>Are the comparisons fair?</summary><p>Training settings are shared with the baselines and many hyperparameters were searched, but some baseline numbers are taken from earlier papers (Appendix B.3) rather than re-run.</p></details>
+    </div>
+    <h3>Glossary</h3>
+    <div class="map">
+      <div><b>PDE</b>An equation relating a field to its derivatives in space and time, e.g. Navier–Stokes.</div>
+      <div><b>Mesh</b>A set of points (plus connectivity) that discretises the domain.</div>
+      <div><b>Neural operator</b>A network that maps input functions to solution functions, independent of the discretisation.</div>
+      <div><b>Slice</b>A soft group of mesh points in a similar physical state.</div>
+      <div><b>Physics-aware token</b>The weighted average of one slice's features.</div>
+      <div><b>Relative L2</b>‖u − û‖ / ‖u‖, the error relative to the size of the field.</div>
+      <div><b>Spearman ρ</b>Rank correlation: does the model order designs correctly?</div>
+      <div><b>Reynolds number</b>The ratio of inertial to viscous forces, which sets the flow regime.</div>
+    </div>
+    <footer>
+      Interactive walkthrough of <em>Transolver: A Fast Transformer Solver for PDEs on General Geometries</em>, H. Wu, H. Luo, H. Wang, J. Wang, M. Long, ICML 2024. All numbers in the charts are taken from the paper's tables. The playground and worked example are illustrations built for this page. Prepared for the TUM seminar <em>Deep Learning for Dynamical Simulations</em>.
+    </footer>
+  </section>
+  </main>
+</div>
+
+<script>
+/* ===================== utilities ===================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+function viridis(t){t=Math.max(0,Math.min(1,t));const s=t*(VIRIDIS.length-1),i=Math.min(VIRIDIS.length-2,Math.floor(s)),f=s-i;const a=VIRIDIS[i],b=VIRIDIS[i+1];return `rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`}
+const VIRIDIS_CSS='linear-gradient(90deg,'+VIRIDIS.map(c=>`rgb(${c})`).join(',')+')';
+function sliceColor(j){const h=(j*137.508+210)%360;const dark=isDark();return `hsl(${h.toFixed(0)},${dark?70:62}%,${dark?62:50}%)`}
+function isDark(){const t=document.documentElement.getAttribute('data-theme');if(t)return t==='dark';return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches}
+function softmax(a){const m=Math.max(...a);const e=a.map(v=>Math.exp(v-m));const s=e.reduce((x,y)=>x+y,0);return e.map(v=>v/s)}
+function fmtNum(x){if(x>=1e15)return (x/1e15).toFixed(1)+' P';if(x>=1e12)return (x/1e12).toFixed(1)+' T';if(x>=1e9)return (x/1e9).toFixed(1)+' G';if(x>=1e6)return (x/1e6).toFixed(1)+' M';if(x>=1e3)return (x/1e3).toFixed(1)+' K';return x.toFixed(0)}
+function fmtBytes(b){const u=['B','KB','MB','GB','TB','PB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++}return b.toFixed(b<10?1:0)+' '+u[i]}
+function setupCanvas(cv){const r=cv.getBoundingClientRect();const d=window.devicePixelRatio||1;cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));const ctx=cv.getContext('2d');ctx.setTransform(d,0,0,d,0,0);return {ctx,w:r.width,h:r.height}}
+
+/* ===================== theme ===================== */
+(function(){
+  try{const t=localStorage.getItem('transolver-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}
+  $('#themeBtn').addEventListener('click',()=>{const next=isDark()?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem('transolver-theme',next)}catch(e){}rerenderAll()});
+  if(window.matchMedia)window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>rerenderAll());
+})();
+
+/* ===================== flow field dataset ===================== */
+const R=0.5, DOM={xmin:-2.2,xmax:2.2,ymin:-1.3,ymax:1.3};
+function flow(x,y){const r2=x*x+y*y,r=Math.sqrt(r2),c=x/r,s=y/r;const ur=(1-R*R/r2)*c,ut=-(1+R*R/r2)*s;const ux=ur*c-ut*s,uy=ur*s+ut*c;return {ux,uy,cp:1-(ux*ux+uy*uy)}}
+function makeDataset(N,seed){
+  const rnd=mulberry32(seed),P=[];
+  while(P.length<N){
+    const x=DOM.xmin+rnd()*(DOM.xmax-DOM.xmin),y=DOM.ymin+rnd()*(DOM.ymax-DOM.ymin),r=Math.hypot(x,y);
+    if(r<R*1.04)continue;
+    if(rnd()>0.12+0.88*Math.exp(-(r-R)/0.4))continue;
+    const f=flow(x,y);P.push({x,y,cp:Math.max(-3,f.cp),ux:f.ux,uy:f.uy});
+  }
+  const keys=['x','y','cp','ux','uy'];const st=keys.map(k=>{let m=0;P.forEach(p=>m+=p[k]);m/=N;let v=0;P.forEach(p=>v+=(p[k]-m)**2);return {m,s:Math.sqrt(v/N)||1}});
+  P.forEach(p=>{p.z=keys.map((k,i)=>(p[k]-st[i].m)/st[i].s)});
+  return P;
+}
+function feat(p,alpha){const a=1-alpha,b=alpha;return [a*p.z[0],a*p.z[1],b*p.z[2],b*0.7*p.z[3],b*0.7*p.z[4]]}
+function dist2(a,b){let s=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];s+=d*d}return s}
+function dot(a,b){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s}
+function kmeans(F,k,seed,iters=30){
+  const n=F.length,d=F[0].length,rnd=mulberry32(seed),C=[F[Math.floor(rnd()*n)].slice()],D=new Float64Array(n).fill(Infinity);
+  while(C.length<k){const c=C[C.length-1];let sum=0;for(let i=0;i<n;i++){const dd=dist2(F[i],c);if(dd<D[i])D[i]=dd;sum+=D[i]}
+    let r=rnd()*sum,idx=0;for(;idx<n-1;idx++){r-=D[idx];if(r<=0)break}C.push(F[idx].slice())}
+  const A=new Int32Array(n);
+  for(let it=0;it<iters;it++){
+    for(let i=0;i<n;i++){let best=0,bd=Infinity;for(let j=0;j<k;j++){const dd=dist2(F[i],C[j]);if(dd<bd){bd=dd;best=j}}A[i]=best}
+    const S=Array.from({length:k},()=>new Array(d).fill(0)),cnt=new Array(k).fill(0);
+    for(let i=0;i<n;i++){cnt[A[i]]++;for(let t=0;t<d;t++)S[A[i]][t]+=F[i][t]}
+    for(let j=0;j<k;j++)if(cnt[j]>0)for(let t=0;t<d;t++)C[j][t]=S[j][t]/cnt[j];
+  }
+  return C;
+}
+function sliceWeights(F,C,tau){
+  const n=F.length,M=C.length,W=new Float32Array(n*M),cn=C.map(c=>dot(c,c)),l=new Float64Array(M);
+  for(let i=0;i<n;i++){let mx=-Infinity;for(let j=0;j<M;j++){l[j]=(2*dot(F[i],C[j])-cn[j])/tau;if(l[j]>mx)mx=l[j]}
+    let s=0;for(let j=0;j<M;j++){l[j]=Math.exp(l[j]-mx);s+=l[j]}for(let j=0;j<M;j++)W[i*M+j]=l[j]/s}
+  return W;
+}
+function toCanvas(x,y,w,h){const sx=w/(DOM.xmax-DOM.xmin),sy=h/(DOM.ymax-DOM.ymin);return [(x-DOM.xmin)*sx,h-(y-DOM.ymin)*sy]}
+function drawCylinder(ctx,w,h){const [cx,cy]=toCanvas(0,0,w,h);const rr=R*w/(DOM.xmax-DOM.xmin);ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);ctx.fillStyle=css('--surface');ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle=css('--text-3');ctx.stroke()}
+
+/* ===================== hero ===================== */
+const HERO_P=makeDataset(900,7);
+function renderHero(){
+  $('#heroN').textContent=HERO_P.length.toLocaleString()+' irregular';
+  const F=HERO_P.map(p=>feat(p,0.85)),C=kmeans(F,8,3),W=sliceWeights(F,C,0.16);
+  [['#heroA',false],['#heroB',true]].forEach(([id,colored])=>{
+    const cv=$(id);const {ctx,w,h}=setupCanvas(cv);ctx.clearRect(0,0,w,h);
+    const rad=Math.max(1.6,w/260);
+    HERO_P.forEach((p,i)=>{const [x,y]=toCanvas(p.x,p.y,w,h);let col=css('--text-3'),a=0.75;
+      if(colored){let b=0,bw=0;for(let j=0;j<8;j++)if(W[i*8+j]>bw){bw=W[i*8+j];b=j}col=sliceColor(b);a=0.35+0.65*bw}
+      ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill()});
+    ctx.globalAlpha=1;drawCylinder(ctx,w,h);
+    ctx.fillStyle=css('--text-3');ctx.font='11px JetBrains Mono, monospace';ctx.fillText('flow →',10,16);
+  });
+}
+
+/* ===================== complexity calculator ===================== */
+const BENCH=[['Elasticity',972],['Plasticity',3131],['Navier–Stokes',4096],['Darcy',7225],['Airfoil',11271],['Pipe',16641],['AirfRANS',32000],['Shape-Net Car',32186]];
+const cx={C:256};
+(function initCx(){
+  const chips=$('#cxChips');
+  BENCH.forEach(([n,v])=>{const b=document.createElement('button');b.type='button';b.textContent=`${n} · ${v.toLocaleString()}`;b.onclick=()=>{$('#cxN').value=Math.log10(v);updCx()};chips.appendChild(b)});
+  $('#cxN').addEventListener('input',updCx);$('#cxM').addEventListener('input',updCx);
+  $$('#cxC button').forEach(b=>b.onclick=()=>{$$('#cxC button').forEach(x=>x.classList.remove('on'));b.classList.add('on');cx.C=+b.dataset.v;updCx()});
+  updCx();
+})();
+function updCx(){
+  const N=Math.round(10**+$('#cxN').value),M=2**+$('#cxM').value,C=cx.C;
+  $('#cxNv').textContent=N.toLocaleString();$('#cxMv').textContent=M;$('#cxCv').textContent=C;
+  const std=N*N*C,phy=N*M*C+M*M*C,ms=N*N*4,mp=N*M*4;
+  $('#cxStd').textContent=fmtNum(std);$('#cxPhy').textContent=fmtNum(phy);$('#cxMemStd').textContent=fmtBytes(ms);$('#cxMemPhy').textContent=fmtBytes(mp);
+  const lo=Math.log10(1e3),hi=Math.log10(4e15);const pct=v=>Math.max(1.5,Math.min(100,(Math.log10(Math.max(v,1))-lo)/(hi-lo)*100))+'%';
+  $('#cxStdBar').style.width=pct(std);$('#cxPhyBar').style.width=pct(phy);
+  const lo2=Math.log10(1e3),hi2=Math.log10(2e13);const pct2=v=>Math.max(1.5,Math.min(100,(Math.log10(v)-lo2)/(hi2-lo2)*100))+'%';
+  $('#cxMemStdBar').style.width=pct2(ms);$('#cxMemPhyBar').style.width=pct2(mp);
+  const r=std/phy;$('#cxRatio').textContent=(r>=10?Math.round(r).toLocaleString():r.toFixed(1))+'×';
+}
+
+/* ===================== playground ===================== */
+const PG={P:makeDataset(1600,11),M:8,alpha:0.85,tau:0.16,view:'slices',sel:0,active:null,cache:{}};
+PG.active=PG.P.map((_,i)=>i);
+const M_VALUES=[1,2,4,8,16,32,64];
+function pgCentroids(){const key=PG.alpha.toFixed(2)+'|'+PG.M;if(!PG.cache[key]){const F=PG.P.map(p=>feat(p,PG.alpha));PG.cache[key]=kmeans(F,PG.M,5)}return PG.cache[key]}
+function pgCompute(){
+  const C=pgCentroids(),idx=PG.active,F=idx.map(i=>feat(PG.P[i],PG.alpha)),W=sliceWeights(F,C,PG.tau),M=PG.M,n=idx.length;
+  const mass=new Float64Array(M),zcp=new Float64Array(M),Z=Array.from({length:M},()=>new Float64Array(5));
+  for(let a=0;a<n;a++){const p=PG.P[idx[a]];for(let j=0;j<M;j++){const w=W[a*M+j];mass[j]+=w;zcp[j]+=w*p.cp;for(let t=0;t<5;t++)Z[j][t]+=w*p.z[t]}}
+  for(let j=0;j<M;j++){const m=mass[j]||1e-9;zcp[j]/=m;for(let t=0;t<5;t++)Z[j][t]/=m}
+  const recon=new Float64Array(n),dom=new Int32Array(n),domw=new Float64Array(n);let H=0,num=0,den=0;
+  for(let a=0;a<n;a++){let r=0,b=0,bw=-1,h=0;for(let j=0;j<M;j++){const w=W[a*M+j];r+=w*zcp[j];if(w>bw){bw=w;b=j}if(w>1e-12)h-=w*Math.log(w)}
+    recon[a]=r;dom[a]=b;domw[a]=bw;H+=M>1?h/Math.log(M):0;const cp=PG.P[idx[a]].cp;num+=(cp-r)**2;den+=cp*cp}
+  const S=Z.map(a=>Z.map(b=>dot(a,b)/Math.sqrt(5))),A=S.map(softmax);
+  PG.res={W,mass,zcp,recon,dom,domw,H:H/n,err:Math.sqrt(num/den),A,n};
+}
+function pgDraw(){
+  const cv=$('#pgCanvas'),{ctx,w,h}=setupCanvas(cv),r=PG.res,M=PG.M,idx=PG.active;ctx.clearRect(0,0,w,h);
+  const rad=Math.max(1.8,w/250);let maxErr=0;
+  if(PG.view==='error')for(let a=0;a<r.n;a++)maxErr=Math.max(maxErr,Math.abs(PG.P[idx[a]].cp-r.recon[a]));
+  const cpN=v=>(v+3)/4;
+  for(let a=0;a<r.n;a++){const p=PG.P[idx[a]],[x,y]=toCanvas(p.x,p.y,w,h);let col,al=0.9;
+    if(PG.view==='field')col=viridis(cpN(p.cp));
+    else if(PG.view==='slices'){col=sliceColor(r.dom[a]);al=0.3+0.7*r.domw[a]}
+    else if(PG.view==='slice')col=viridis(r.W[a*M+PG.sel]);
+    else if(PG.view==='recon')col=viridis(cpN(r.recon[a]));
+    else col=viridis(Math.abs(p.cp-r.recon[a])/Math.max(maxErr,1e-6));
+    ctx.globalAlpha=al;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill()}
+  ctx.globalAlpha=1;drawCylinder(ctx,w,h);
+  ctx.fillStyle=css('--text-3');ctx.font='11px JetBrains Mono, monospace';ctx.fillText('flow →',10,16);
+  const lg=$('#pgLegend');
+  if(PG.view==='slices')lg.innerHTML=`<span>colour = dominant slice · faded = soft (uncertain) assignment</span>`;
+  else if(PG.view==='slice')lg.innerHTML=`<span>w<sub>i,${PG.sel+1}</sub> = 0</span><span class="grad" style="background:${VIRIDIS_CSS}"></span><span>1</span>`;
+  else if(PG.view==='error')lg.innerHTML=`<span>0</span><span class="grad" style="background:${VIRIDIS_CSS}"></span><span>${maxErr.toFixed(2)}</span>`;
+  else lg.innerHTML=`<span>C<sub>p</sub> = −3</span><span class="grad" style="background:${VIRIDIS_CSS}"></span><span>1 (stagnation)</span>`;
+  $('#mN').textContent=r.n.toLocaleString();$('#mM').textContent=M;$('#mH').textContent=M>1?r.H.toFixed(2):'—';$('#mE').textContent=r.err.toFixed(3);
+  const tk=$('#pgTokens');tk.innerHTML='';const tot=r.mass.reduce((s,v)=>s+v,0);
+  for(let j=0;j<M;j++){const b=document.createElement('button');b.type='button';b.className='tok'+(PG.view==='slice'&&PG.sel===j?' sel':'');b.innerHTML=`<i style="background:${sliceColor(j)}"></i>z${j+1} · ${r.zcp[j].toFixed(2)} · ${(100*r.mass[j]/tot).toFixed(0)}%`;b.onclick=()=>{PG.sel=j;setView('slice')};tk.appendChild(b)}
+  const ac=$('#attnCanvas'),{ctx:c2,w:w2,h:h2}=setupCanvas(ac);c2.clearRect(0,0,w2,h2);const cs=w2/M;
+  for(let i=0;i<M;i++){const mx=Math.max(...r.A[i]);for(let j=0;j<M;j++){c2.fillStyle=viridis(r.A[i][j]/mx);c2.fillRect(j*cs,i*cs,Math.ceil(cs),Math.ceil(cs))}}
+  if(M<=16){c2.font='10px JetBrains Mono, monospace';if(M<=8)for(let i=0;i<M;i++){const mx=Math.max(...r.A[i]);for(let j=0;j<M;j++){c2.fillStyle=r.A[i][j]/mx>0.6?'rgba(0,0,0,.8)':'rgba(255,255,255,.88)';c2.fillText(r.A[i][j].toFixed(2),j*cs+4,i*cs+cs/2+3)}}}
+}
+function pgUpdate(){PG.M=M_VALUES[+$('#pgM').value];PG.alpha=+$('#pgA').value;PG.tau=10**+$('#pgT').value;if(PG.sel>=PG.M)PG.sel=0;
+  $('#pgMv').textContent=PG.M;$('#pgAv').textContent=PG.alpha<0.15?'position':PG.alpha>0.85?'physics':`${Math.round((1-PG.alpha)*100)}% pos / ${Math.round(PG.alpha*100)}% phys`;$('#pgTv').textContent=PG.tau.toFixed(2);
+  pgCompute();pgDraw()}
+function setView(v){PG.view=v;$$('#pgView button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));pgDraw()}
+(function initPg(){
+  ['#pgM','#pgA','#pgT'].forEach(s=>$(s).addEventListener('input',pgUpdate));
+  $$('#pgView button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+  let rs=1;
+  $('#pgResample').onclick=()=>{const rnd=mulberry32(100+rs++);PG.active=PG.P.map((_,i)=>i).filter(()=>rnd()<0.5);pgUpdate()};
+  $('#pgReset').onclick=()=>{PG.active=PG.P.map((_,i)=>i);pgUpdate()};
+  $('#pgCanvas').addEventListener('click',e=>{const rc=e.target.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;let best=-1,bd=Infinity;
+    PG.active.forEach((pi,a)=>{const [x,y]=toCanvas(PG.P[pi].x,PG.P[pi].y,rc.width,rc.height);const d=(x-mx)**2+(y-my)**2;if(d<bd){bd=d;best=a}});
+    if(best>=0&&bd<400){PG.sel=PG.res.dom[best];setView('slice')}});
+  const set=(m,a,t,view)=>{if(m!=null)$('#pgM').value=M_VALUES.indexOf(m);if(a!=null)$('#pgA').value=a;if(t!=null)$('#pgT').value=Math.log10(t);PG.view=view||PG.view;pgUpdate();setView(PG.view);$('#playground').scrollIntoView({behavior:'smooth',block:'start'})};
+  $$('[data-preset]').forEach(b=>b.onclick=()=>{const p=b.dataset.preset;PG.active=PG.P.map((_,i)=>i);
+    if(p==='m1')set(1,0.85,0.16,'recon');
+    if(p==='phys')set(8,1,0.16,'slices');
+    if(p==='pos')set(8,0,0.16,'slices');
+    if(p==='soft')set(8,0.85,2.5,'slices');
+    if(p==='resample'){set(8,0.85,0.16,'slices');setTimeout(()=>$('#pgResample').click(),50)}
+    if(p==='recon')set(16,0.85,0.16,'recon');
+  });
+  pgUpdate();
+})();
+
+/* ===================== worked example stepper ===================== */
+const ST={step:0,seed:4};
+function toyCompute(seed){
+  const r=mulberry32(seed),N=6;const X=[...Array(N)].map(()=>[+(r()*2-1).toFixed(2),+(r()*2-1).toFixed(2)]);
+  const P=[[r()*6-3,r()*6-3],[r()*6-3,r()*6-3]].map(row=>row.map(v=>+v.toFixed(2)));
+  const L=X.map(x=>[0,1].map(j=>x[0]*P[0][j]+x[1]*P[1][j]));const W=L.map(softmax);
+  const mass=[0,1].map(j=>W.reduce((s,w)=>s+w[j],0));
+  const Z=[0,1].map(j=>[0,1].map(c=>W.reduce((s,w,i)=>s+w[j]*X[i][c],0)/mass[j]));
+  const S=Z.map(a=>Z.map(b=>(a[0]*b[0]+a[1]*b[1])/Math.SQRT2)),A=S.map(softmax);
+  const Zp=A.map(a=>[0,1].map(c=>a[0]*Z[0][c]+a[1]*Z[1][c]));
+  const Xp=W.map(w=>[0,1].map(c=>w[0]*Zp[0][c]+w[1]*Zp[1][c]));
+  return {X,P,L,W,mass,Z,A,Zp,Xp};
+}
+function matHTML(cap,M,rows,cols,opt={}){
+  const mx=Math.max(1e-9,...M.flat().map(Math.abs));
+  let h=`<div class="mat"><div class="cap">${cap}</div><table><tr><th></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+  M.forEach((row,i)=>{h+=`<tr><th>${rows[i]}</th>`;row.forEach(v=>{let bg;if(opt.prob){bg=`color-mix(in srgb, var(--accent) ${Math.round(v*80)}%, var(--surface-2))`}else{const t=Math.abs(v)/mx;bg=v>=0?`color-mix(in srgb, var(--accent) ${Math.round(t*55)}%, var(--surface-2))`:`color-mix(in srgb, var(--accent-2) ${Math.round(t*55)}%, var(--surface-2))`}
+    h+=`<td style="background:${bg}">${v.toFixed(2)}</td>`});h+='</tr>'});
+  return h+'</table></div>';
+}
+const STEPS=[
+  {title:'1 · Embed the mesh',box:0,
+   text:'Each mesh point i (coordinates g<sub>i</sub> plus observed quantities u<sub>i</sub>) is embedded by a linear layer into a C-dimensional feature vector x<sub>i</sub>. Here N = 6 points and C = 2 channels; positive values are blue, negative values orange.',
+   eq:'x^0 = \\mathrm{Linear}\\big(\\mathrm{Concat}(g,u)\\big)\\in\\mathbb{R}^{N\\times C}',
+   scale:(n)=>`Real scale (Shape-Net Car): x is <b>32,186 × 256</b>.`,
+   mats:t=>matHTML('x  (N×C)',t.X,['p1','p2','p3','p4','p5','p6'],['c1','c2'])},
+  {title:'2 · Slice: soft-assign points to slices',box:1,
+   text:'A point-wise linear layer <code>Project</code> (C → M) scores each point against each slice, and a softmax <b>over the slices</b> turns the scores into weights that sum to 1 per row. Points with similar features get similar rows; these are the soft "physical states".',
+   eq:'w_i=\\mathrm{Softmax}\\big(x_i W_{\\text{proj}}\\big),\\qquad \\textstyle\\sum_{j} w_{i,j}=1',
+   scale:()=>`Real scale: w is <b>32,186 × 32</b> per head, which is O(NMC) to compute.`,
+   mats:t=>matHTML('W<sub>proj</sub> (C×M)',t.P,['c1','c2'],['s1','s2'])+matHTML('w  (N×M), rows sum to 1',t.W,['p1','p2','p3','p4','p5','p6'],['s1','s2'],{prob:true})},
+  {title:'3 · Aggregate: one token per slice',box:2,
+   text:'Each slice becomes one <b>physics-aware token</b>: the weighted average of all point features, using the slice weights. Dividing by Σw keeps tokens on the same scale whether a slice holds many points or few.',
+   eq:'z_j=\\frac{\\sum_i w_{i,j}x_i}{\\sum_i w_{i,j}}\\;\\Rightarrow\\; z=\\mathrm{diag}(w^\\top\\mathbf 1)^{-1}\\,w^\\top x',
+   scale:()=>`Real scale: 32,186 points are compressed into <b>32 tokens × 256</b>.`,
+   mats:t=>`<div class="mat"><div class="cap">Σ<sub>i</sub> w<sub>i,j</sub></div><table><tr><th>s1</th><th>s2</th></tr><tr><td>${t.mass[0].toFixed(2)}</td><td>${t.mass[1].toFixed(2)}</td></tr></table></div>`+matHTML('z  (M×C)',t.Z,['z1','z2'],['c1','c2'])},
+  {title:'4 · Attend between tokens',box:3,
+   text:'Standard scaled dot-product attention, but between the M tokens rather than the N points. In this toy example q = k = v = z; the real model uses learned linear maps and several heads.',
+   eq:"z'=\\mathrm{Softmax}\\!\\Big(\\tfrac{qk^\\top}{\\sqrt C}\\Big)v",
+   scale:()=>`Real scale: the attention matrix is only <b>32 × 32</b> instead of 32,186 × 32,186 (≈1 billion entries).`,
+   mats:t=>matHTML('attention (M×M)',t.A,['z1','z2'],['z1','z2'],{prob:true})+matHTML("z' (M×C)",t.Zp,["z'1","z'2"],['c1','c2'])},
+  {title:'5 · Deslice: broadcast back to points',box:4,
+   text:'Each point gets back a mix of the updated tokens, weighted by <b>the same slice weights</b> as in step 2. In the full layer this output is added to the input (residual) and passed through LayerNorm and a feedforward network.',
+   eq:"x'_i=\\sum_j w_{i,j}\\,z'_j\\;\\Rightarrow\\; x' = w\\,z'",
+   scale:()=>`Real scale: back to <b>32,186 × 256</b>, which is O(NMC) again. The total cost is linear in N.`,
+   mats:t=>matHTML("x' (N×C)",t.Xp,['p1','p2','p3','p4','p5','p6'],['c1','c2'])}
+];
+function stepDiagramSVG(active){
+  const labels=[['Embed','x','N×C'],['Slice','w','N×M'],['Aggregate','z','M×C'],['Attend',"z′",'M×C'],['Deslice',"x′",'N×C']];
+  const W=880,bw=148,gap=(W-5*bw)/4;let s=`<svg viewBox="0 0 ${W} 92" role="img" aria-label="Physics-Attention pipeline">`;
+  labels.forEach((l,i)=>{const x=i*(bw+gap);s+=`<g class="sd-box${i===active?' on':''}"><rect x="${x}" y="8" width="${bw}" height="72" rx="12"/><text x="${x+bw/2}" y="36" text-anchor="middle" font-weight="600">${l[0]}</text><text class="shape" x="${x+bw/2}" y="60" text-anchor="middle">${l[1]} : ${l[2]}</text></g>`;
+    if(i<4){const x1=x+bw+4,x2=x+bw+gap-4;s+=`<path class="sd-arrow" d="M${x1} 44 L${x2} 44 M${x2-6} 39 L${x2} 44 L${x2-6} 49"/>`}});
+  return s+'</svg>';
+}
+function renderStep(){
+  const t=toyCompute(ST.seed),S=STEPS[ST.step];
+  $('#stepDiagram').innerHTML=stepDiagramSVG(S.box);
+  $('#stepTitle').textContent=S.title;$('#stepText').innerHTML=`<p>${S.text}</p>`;
+  $('#stepEq').innerHTML='$$'+S.eq+'$$';$('#stepScale').innerHTML=S.scale();$('#stepMats').innerHTML=S.mats(t);
+  $$('#stepDots button').forEach((b,i)=>b.classList.toggle('on',i===ST.step));
+  $('#stepPrev').disabled=ST.step===0;$('#stepNext').textContent=ST.step===STEPS.length-1?'Start over ↺':'Next →';
+  typeset($('#stepEq'));
+}
+(function initStep(){
+  const d=$('#stepDots');STEPS.forEach((_,i)=>{const b=document.createElement('button');b.type='button';b.textContent=i+1;b.onclick=()=>{ST.step=i;renderStep()};d.appendChild(b)});
+  $('#stepPrev').onclick=()=>{if(ST.step>0){ST.step--;renderStep()}};
+  $('#stepNext').onclick=()=>{ST.step=(ST.step+1)%STEPS.length;renderStep()};
+  $('#stepRand').onclick=()=>{ST.seed++;renderStep()};
+})();
+
+/* ===================== architecture svg ===================== */
+function renderArch(){
+  const s=`<svg viewBox="0 0 760 470" role="img" aria-label="Transolver architecture">
+  <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="currentColor" style="color:var(--text-3)"/></marker></defs>
+  <g style="color:var(--text-3)">
+  <rect class="a-box soft" x="20" y="20" width="200" height="60" rx="12"/><text class="a-t" x="120" y="46" text-anchor="middle">Input mesh</text><text class="a-s" x="120" y="66" text-anchor="middle">g (N×C_g), u (N×C_u)</text>
+  <path class="a-line" d="M120 80 V112" marker-end="url(#ah)"/>
+  <rect class="a-box" x="20" y="114" width="200" height="56" rx="12"/><text class="a-t" x="120" y="138" text-anchor="middle">Linear embedding</text><text class="a-s" x="120" y="157" text-anchor="middle">x⁰ : N×C</text>
+  <path class="a-line" d="M120 170 V214" marker-end="url(#ah)"/>
+  <rect class="a-frame" x="8" y="200" width="224" height="182" rx="14"/><text class="a-lbl" x="132" y="398">× L (= 8)</text>
+  <rect class="a-box" x="30" y="216" width="180" height="34" rx="9"/><text class="a-t" x="120" y="238" text-anchor="middle" style="font-size:13px">LayerNorm</text>
+  <rect class="a-box hl" x="30" y="258" width="180" height="40" rx="9"/><text class="a-t" x="120" y="283" text-anchor="middle">Physics-Attention</text>
+  <text class="a-s" x="218" y="305">+ residual</text>
+  <rect class="a-box" x="30" y="306" width="180" height="30" rx="9"/><text class="a-t" x="120" y="326" text-anchor="middle" style="font-size:13px">LayerNorm</text>
+  <rect class="a-box" x="30" y="342" width="180" height="32" rx="9"/><text class="a-t" x="120" y="363" text-anchor="middle" style="font-size:13px">FeedForward</text>
+  <path class="a-line" d="M120 382 V412" marker-end="url(#ah)"/>
+  <rect class="a-box" x="20" y="414" width="200" height="46" rx="12"/><text class="a-t" x="120" y="436" text-anchor="middle">Linear head</text><text class="a-s" x="120" y="452" text-anchor="middle">predicted fields (N×C_out)</text>
+  <path class="a-line" d="M210 278 C 260 278, 260 100, 300 100" stroke-dasharray="4 4"/>
+  <rect class="a-frame" x="300" y="20" width="440" height="430" rx="16"/><text class="a-lbl" x="316" y="44">inside Physics-Attention (per head)</text>
+  <rect class="a-box" x="330" y="62" width="380" height="44" rx="10"/><text class="a-t" x="520" y="82" text-anchor="middle">features x</text><text class="a-s" x="520" y="98" text-anchor="middle">N × C</text>
+  <path class="a-line" d="M430 106 V132" marker-end="url(#ah)"/><path class="a-line" d="M610 106 V196" marker-end="url(#ah)"/>
+  <rect class="a-box hl" x="330" y="134" width="200" height="50" rx="10"/><text class="a-t" x="430" y="155" text-anchor="middle">Project + Softmax</text><text class="a-s" x="430" y="173" text-anchor="middle">slice weights w : N×M</text>
+  <path class="a-line" d="M430 184 V196" marker-end="url(#ah)"/>
+  <rect class="a-box hl" x="330" y="198" width="380" height="50" rx="10"/><text class="a-t" x="520" y="219" text-anchor="middle">Aggregate (slice)</text><text class="a-s" x="520" y="237" text-anchor="middle">z = norm(wᵀ x) : M×C</text>
+  <path class="a-line" d="M520 248 V266" marker-end="url(#ah)"/>
+  <rect class="a-box hl" x="330" y="268" width="380" height="54" rx="10"/><text class="a-t" x="520" y="290" text-anchor="middle">Attention among tokens</text><text class="a-s" x="520" y="309" text-anchor="middle">softmax(qkᵀ/√C) v : M×M → M×C</text>
+  <path class="a-line" d="M520 322 V342" marker-end="url(#ah)"/>
+  <rect class="a-box hl" x="330" y="344" width="380" height="50" rx="10"/><text class="a-t" x="520" y="365" text-anchor="middle">Deslice (broadcast)</text><text class="a-s" x="520" y="383" text-anchor="middle">x′ = w z′ : N×C</text>
+  <path class="a-line" d="M345 184 C 310 230, 310 330, 330 369" stroke-dasharray="4 4" marker-end="url(#ah)"/><text class="a-s" x="312" y="420">same w reused</text>
+  </g></svg>`;
+  $('#archSvg').innerHTML=s;
+}
+const CFG=[['Elasticity','Rel. L2','500','1e-3','AdamW','1','8','8','128','64'],['Plasticity','Rel. L2','500','1e-3','AdamW','8','8','8','128','64'],['Airfoil','Rel. L2','500','1e-3','AdamW','4','8','8','128','64'],['Pipe','Rel. L2','500','1e-3','AdamW','4','8','8','128','64'],['Navier–Stokes','Rel. L2','500','1e-3','AdamW','2','8','8','256','32'],['Darcy','Rel. L2 + 0.1·L_g','500','1e-3','AdamW','4','8','8','128','64'],['Shape-Net Car','L_v + 0.5·L_s','200','1e-3','Adam','1','8','8','256','32'],['AirfRANS','L_v + L_s','400','1e-3','Adam','1','8','8','256','32']];
+$('#cfgBody').innerHTML=CFG.map(r=>`<tr>${r.map((c,i)=>`<td class="${i>=2&&i!==4?'num':''}">${c}</td>`).join('')}</tr>`).join('');
+
+/* ===================== code ===================== */
+const CODE={
+attn:`import torch
+import torch.nn as nn
+
+class PhysicsAttention(nn.Module):
+    """Physics-Attention (Eq. 1-4), multi-head. Input/output: (B, N, C)."""
+    def __init__(self, dim, heads=8, slices=64):
+        super().__init__()
+        self.h, self.d = heads, dim // heads
+        self.to_x    = nn.Linear(dim, dim)            # features, split into heads
+        self.project = nn.Linear(self.d, slices)      # Eq.1  Project(): d -> M  (point-wise)
+        self.q = nn.Linear(self.d, self.d, bias=False)
+        self.k = nn.Linear(self.d, self.d, bias=False)
+        self.v = nn.Linear(self.d, self.d, bias=False)
+        self.out = nn.Linear(dim, dim)
+
+    def forward(self, x):                                       # x: (B, N, C)
+        B, N, C = x.shape
+        x = self.to_x(x).view(B, N, self.h, self.d).transpose(1, 2)   # (B, H, N, d)
+
+        # Eq.1 - slice: softmax over the M slices -> sharp, low-entropy assignment
+        w = self.project(x).softmax(dim=-1)                     # (B, H, N, M)
+
+        # Eq.2 - aggregate: one physics-aware token per slice
+        mass = w.sum(dim=2)[..., None]                          # (B, H, M, 1)
+        z = torch.einsum("bhnm,bhnd->bhmd", w, x) / (mass + 1e-5)    # (B, H, M, d)
+
+        # Eq.3 - attention among the M tokens (M x M, not N x N)
+        q, k, v = self.q(z), self.k(z), self.v(z)
+        attn = (q @ k.transpose(-2, -1) / self.d ** 0.5).softmax(dim=-1)  # (B, H, M, M)
+        z = attn @ v                                            # (B, H, M, d)
+
+        # Eq.4 - deslice: broadcast tokens back with the SAME weights
+        x = torch.einsum("bhnm,bhmd->bhnd", w, z)               # (B, H, N, d)
+        x = x.transpose(1, 2).reshape(B, N, C)
+        return self.out(x)                                      # cost: O(NMC + M^2 C)`,
+model:`class TransolverBlock(nn.Module):
+    """One layer (Eq. 6): pre-norm Transformer block with Physics-Attention."""
+    def __init__(self, dim, heads, slices):
+        super().__init__()
+        self.ln1  = nn.LayerNorm(dim)
+        self.attn = PhysicsAttention(dim, heads, slices)
+        self.ln2  = nn.LayerNorm(dim)
+        self.ffn  = nn.Sequential(nn.Linear(dim, dim), nn.GELU(), nn.Linear(dim, dim))
+
+    def forward(self, x):
+        x = self.attn(self.ln1(x)) + x      # x_hat^l = PhysAttn(LN(x^{l-1})) + x^{l-1}
+        x = self.ffn(self.ln2(x)) + x       # x^l     = FFN(LN(x_hat^l)) + x_hat^l
+        return x
+
+class Transolver(nn.Module):
+    def __init__(self, in_dim, out_dim, dim=128, layers=8, heads=8, slices=64):
+        super().__init__()
+        self.embed  = nn.Linear(in_dim, dim)            # x^0 = Linear(Concat(g, u))
+        self.blocks = nn.ModuleList(
+            [TransolverBlock(dim, heads, slices) for _ in range(layers)])
+        self.head   = nn.Linear(dim, out_dim)           # final linear projection
+
+    def forward(self, g, u=None):                        # g: (B, N, C_g), u: (B, N, C_u)
+        x = g if u is None else torch.cat([g, u], dim=-1)
+        x = self.embed(x)
+        for blk in self.blocks:
+            x = blk(x)
+        return self.head(x)                              # (B, N, C_out)
+
+# Paper defaults: L=8 layers, 8 heads, C=128 with M=64  or  C=256 with M=32
+model = Transolver(in_dim=2, out_dim=1, dim=128, layers=8, heads=8, slices=64)`,
+train:`def relative_l2(pred, target):
+    """Eq.14: ||u - u_hat|| / ||u||, averaged over the batch."""
+    diff = (pred - target).flatten(1).norm(dim=1)
+    return (diff / target.flatten(1).norm(dim=1)).mean()
+
+opt = torch.optim.AdamW(model.parameters(), lr=1e-3)   # Table 8: AdamW, lr 1e-3
+for epoch in range(500):                               # 500 epochs (standard benchmarks)
+    for g, u_true in loader:                           # e.g. Elasticity: g (B, 972, 2) -> stress (B, 972, 1)
+        pred = model(g)
+        loss = relative_l2(pred, u_true)
+        opt.zero_grad(); loss.backward(); opt.step()
+
+# Car / airfoil design: loss = L_volume + lambda * L_surface (lambda = 0.5 for Shape-Net Car),
+# then integrate predicted surface pressure (and shear) to get the drag / lift coefficient (Eq.15).`
+};
+const CODEMAP={
+attn:[['Eq. 1 → self.project + softmax','Point-wise C→M scores; softmax over slices.'],['Eq. 2 → einsum / mass','Weighted average of point features per slice.'],['Eq. 3 → q, k, v, attn','Standard attention on M tokens only.'],['Eq. 4 → einsum(w, z)','Broadcast back with the same w.']],
+model:[['x⁰ = Linear(Concat(g,u))','self.embed'],['Eq. 6 (two residual lines)','TransolverBlock.forward'],['L = 8 layers','nn.ModuleList of blocks'],['Structured meshes','The paper swaps Project for a 3×3 conv.']],
+train:[['Metric = loss','Relative L2 (Eq. 14).'],['Optimiser','AdamW, lr 1e-3, 500 epochs (Table 8).'],['Design tasks','Volume + surface loss; Adam, 200–400 epochs.'],['Design metrics','C_D / C_L error and Spearman ρ.']]
+};
+function highlightPy(src){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const re=/("""[\s\S]*?"""|"[^"\n]*")|(#[^\n]*)|\b(import|class|def|return|for|in|if|else|None|super|is)\b|\b(nn\.\w+|torch\.\w+)\b|\b(\d+(?:\.\d+)?(?:e-?\d+)?)\b/g;
+  let out='',last=0,m;
+  while((m=re.exec(src))){out+=esc(src.slice(last,m.index));const cls=m[1]?'tok-s':m[2]?'tok-c':m[3]?'tok-k':m[4]?'tok-f':'tok-n';out+=`<span class="${cls}">${esc(m[0])}</span>`;last=re.lastIndex}
+  return out+esc(src.slice(last));
+}
+let codeKey='attn';
+function renderCode(){$('#codePre').innerHTML=highlightPy(CODE[codeKey]);$('#codeMap').innerHTML=CODEMAP[codeKey].map(([a,b])=>`<div><b>${a}</b>${b}</div>`).join('')}
+$$('#codeTabs button').forEach(b=>b.onclick=()=>{$$('#codeTabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');codeKey=b.dataset.v;renderCode()});
+$('#copyBtn').onclick=()=>{const t=CODE[codeKey];const done=()=>{$('#copyBtn').textContent='Copied';setTimeout(()=>$('#copyBtn').textContent='Copy',1400)};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done).catch(()=>{});else{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}catch(e){}ta.remove()}};
+
+/* ===================== data from the paper ===================== */
+const T2_BENCH=['Elasticity','Plasticity','Airfoil','Pipe','Navier–Stokes','Darcy'];
+const T2=[
+ ['FNO',[null,null,null,null,0.1556,0.0108]],['WMT',[0.0359,0.0076,0.0075,0.0077,0.1541,0.0082]],['U-FNO',[0.0239,0.0039,0.0269,0.0056,0.2231,0.0183]],
+ ['Geo-FNO',[0.0229,0.0074,0.0138,0.0067,0.1556,0.0108]],['U-NO',[0.0258,0.0034,0.0078,0.0100,0.1713,0.0113]],['F-FNO',[0.0263,0.0047,0.0078,0.0070,0.2322,0.0077]],
+ ['LSM',[0.0218,0.0025,0.0059,0.0050,0.1535,0.0065]],['Galerkin',[0.0240,0.0120,0.0118,0.0098,0.1401,0.0084]],['HT-Net',[null,0.0333,0.0065,0.0059,0.1847,0.0079]],
+ ['OFormer',[0.0183,0.0017,0.0183,0.0168,0.1705,0.0124]],['GNOT',[0.0086,0.0336,0.0076,0.0047,0.1380,0.0105]],['FactFormer',[null,0.0312,0.0071,0.0060,0.1214,0.0109]],
+ ['ONO',[0.0118,0.0048,0.0061,0.0052,0.1195,0.0076]],['Transolver',[0.0064,0.0012,0.0053,0.0033,0.0900,0.0057]]];
+const T3_METRICS=[['Car · Volume','lower'],['Car · Surface','lower'],['Car · C_D error','lower'],['Car · ρ_D','higher'],['AirfRANS · Volume','lower'],['AirfRANS · Surface','lower'],['AirfRANS · C_L error','lower'],['AirfRANS · ρ_L','higher']];
+const T3=[
+ ['Simple MLP',[0.0512,0.1304,0.0307,0.9496,0.0081,0.0200,0.2108,0.9932]],['GraphSAGE',[0.0461,0.1050,0.0270,0.9695,0.0087,0.0184,0.1476,0.9964]],
+ ['PointNet',[0.0494,0.1104,0.0298,0.9583,0.0253,0.0996,0.1973,0.9919]],['Graph U-Net',[0.0471,0.1102,0.0226,0.9725,0.0076,0.0144,0.1677,0.9949]],
+ ['MeshGraphNet',[0.0354,0.0781,0.0168,0.9840,0.0214,0.0387,0.2252,0.9945]],['GNO',[0.0383,0.0815,0.0172,0.9834,0.0269,0.0405,0.2016,0.9938]],
+ ['Galerkin',[0.0339,0.0878,0.0179,0.9764,0.0074,0.0159,0.2336,0.9951]],['Geo-FNO',[0.1670,0.2378,0.0664,0.8280,0.0361,0.0301,0.6161,0.9257]],
+ ['GNOT',[0.0329,0.0798,0.0178,0.9833,0.0049,0.0152,0.1992,0.9942]],['GINO',[0.0386,0.0810,0.0184,0.9826,0.0297,0.0482,0.1821,0.9958]],
+ ['3D-GeoCA',[0.0319,0.0779,0.0159,0.9842,null,null,null,null]],['Transolver',[0.0207,0.0745,0.0103,0.9935,0.0037,0.0142,0.1030,0.9978]]];
+const T6=[['Simple MLP',[0.6205,0.9578,0.4128,0.9572]],['GraphSAGE',[0.4333,0.9707,0.2538,0.9894]],['PointNet',[0.3836,0.9806,0.4425,0.9784]],['Graph U-Net',[0.4664,0.9645,0.3756,0.9816]],
+ ['MeshGraphNet',[1.7718,0.7631,0.6525,0.8927]],['GNO',[0.4408,0.9878,0.3038,0.9884]],['Galerkin',[0.4615,0.9826,0.3814,0.9821]],['GNOT',[0.3268,0.9865,0.3497,0.9868]],
+ ['GINO',[0.4180,0.9645,0.2583,0.9923]],['Transolver',[0.2996,0.9896,0.1500,0.9950]]];
+const T6_METRICS=[['OOD Reynolds · C_L error','lower',0],['OOD Reynolds · ρ_L','higher',1],['OOD angles · C_L error','lower',2],['OOD angles · ρ_L','higher',3]];
+const T9_M=[1,8,16,32,64,96,128,256,512,1024];
+const T9={'Elasticity':[0.0148,0.0071,0.0067,0.0067,0.0064,0.0061,0.0058,0.0054,0.0059,0.0068],'Plasticity':[0.0140,0.0028,0.0019,0.0015,0.0012,0.0008,0.0009,0.0013,0.0012,0.0017],
+ 'Airfoil':[0.0084,0.0056,0.0057,0.0067,0.0053,0.0054,0.0049,0.0043,0.0045,0.0048],'Pipe':[0.0087,0.0040,0.0045,0.0042,0.0033,0.0033,0.0034,0.0032,0.0040,0.0047],
+ 'Navier–Stokes':[0.1511,0.1136,0.0958,0.0900,0.0871,0.0802,0.0783,0.0856,0.0914,0.1003],'Darcy':[0.0386,0.0096,0.0067,0.0063,0.0059,0.0055,0.0054,0.0050,0.0056,0.0055]};
+const T9_SQ={'Elasticity':null,'Plasticity':0.0022,'Airfoil':0.0071,'Pipe':0.0049,'Navier–Stokes':0.1077,'Darcy':0.0088};
+const T9_MEM=[0.60,0.60,0.61,0.62,0.64,0.68,0.69,0.81,1.01,1.53];
+const T10_N=[484,1681,3364,7225,10609,19881,44521,168921];
+const T10_PT=[0.02017,0.0103,0.0073,0.0081,null,null,null,null], T10_TS=[0.02019,0.0089,0.0058,0.0059,0.0057,0.0062,0.0063,0.0060];
+const BENCHMETA=[['Elasticity','Point cloud','2D',972,'Material structure → inner stress','1000 / 200'],['Plasticity','Structured mesh','2D + time',3131,'Die shape → deformation (20 steps)','900 / 80'],
+ ['Airfoil','Structured mesh','2D',11271,'Airfoil shape → Mach number','1000 / 200'],['Pipe','Structured mesh','2D',16641,'Pipe shape → horizontal velocity','1000 / 200'],
+ ['Navier–Stokes','Regular grid','2D + time',4096,'Past 10 steps → next 10 steps','1000 / 200'],['Darcy','Regular grid','2D',7225,'Porous medium → pressure','1000 / 200'],
+ ['Shape-Net Car','Unstructured mesh','3D',32186,'Car shape → velocity & surface pressure','789 / 100'],['AirfRANS','Unstructured mesh','2D',32000,'Airfoil + Re + AoA → velocity & pressure','800 / 200']];
+$('#benchGrid').innerHTML=BENCHMETA.map(b=>`<div class="card"><span class="tag">${b[1]} · ${b[2]}</span><h4>${b[0]}</h4><div class="n">${b[3].toLocaleString()} <span class="small muted">points</span></div><p>${b[4]}</p><p class="small" style="margin-top:4px">train / test: ${b[5]}</p></div>`).join('');
+
+/* ===================== chart helpers ===================== */
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent,text){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e}
+function hbar(container,rows,{higher=false,decimals=4,floor=null}={}){
+  const W=Math.max(300,container.clientWidth),rowH=26,top=6,labW=Math.min(130,W*0.3),valW=60,H=top+rows.length*rowH+4;
+  container.innerHTML='';const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:W,height:H},container);
+  const vals=rows.map(r=>r.value);const max=Math.max(...vals);const min=floor!=null?floor:0;
+  const sc=v=>Math.max(2,(v-min)/(max-min||1)*(W-labW-valW-10));
+  rows.forEach((r,i)=>{const y=top+i*rowH,hl=r.hl?' hl':'';
+    el('text',{x:labW-8,y:y+16,'text-anchor':'end',class:'c-lbl'+hl},svg,r.label);
+    el('rect',{x:labW,y:y+4,width:sc(r.value),height:rowH-10,rx:4,class:'c-bar'+hl},svg);
+    el('text',{x:labW+sc(r.value)+6,y:y+16,class:'c-val'+hl},svg,r.value.toFixed(decimals))});
+  if(floor!=null)el('text',{x:labW,y:H+12,class:'c-axis'},svg,`axis starts at ${floor}`);
+  if(floor!=null)svg.setAttribute('viewBox',`0 0 ${W} ${H+16}`),svg.setAttribute('height',H+16);
+}
+function lineChart(container,{xs,series,xlog=true,xTickLabels,yFmt=v=>v.toFixed(3),hlines=[],notes=[],yMin=null,height=260}){
+  const W=Math.max(300,container.clientWidth),H=height,m={l:52,r:16,t:14,b:34};container.innerHTML='';
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:W,height:H},container);
+  const all=series.flatMap(s=>s.ys.filter(v=>v!=null)).concat(hlines.map(h=>h.y));
+  let lo=yMin!=null?yMin:Math.min(...all),hi=Math.max(...all);const pad=(hi-lo)*0.12||hi*0.1;lo=Math.max(0,lo-pad);hi=hi+pad;
+  const fx=xlog?(v=>Math.log(v)):(v=>v);const x0=fx(xs[0]),x1=fx(xs[xs.length-1]);
+  const X=v=>m.l+(fx(v)-x0)/(x1-x0)*(W-m.l-m.r),Y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4,y=Y(v);el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:'c-grid'},svg);el('text',{x:m.l-6,y:y+4,'text-anchor':'end',class:'c-axis'},svg,yFmt(v))}
+  const skip=W<480&&xs.length>8?2:1;
+  xs.forEach((v,i)=>{if(i%skip&&i!==xs.length-1)return;el('text',{x:X(v),y:H-m.b+18,'text-anchor':'middle',class:'c-axis'},svg,xTickLabels?xTickLabels[i]:v)});
+  hlines.forEach(h=>{el('line',{x1:m.l,x2:W-m.r,y1:Y(h.y),y2:Y(h.y),class:'c-dash'},svg);el('text',{x:W-m.r,y:Y(h.y)-6,'text-anchor':'end',class:'c-note'},svg,h.label)});
+  series.forEach(s=>{let d='';s.ys.forEach((v,i)=>{if(v==null)return;d+=(d?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(v).toFixed(1)});
+    el('path',{d,class:'c-line '+s.cls},svg);
+    s.ys.forEach((v,i)=>{if(v==null)return;const best=s.best===i;el('circle',{cx:X(xs[i]),cy:Y(v),r:best?6:3.5,class:'c-dot '+s.cls},svg);
+      if(best)el('text',{x:X(xs[i]),y:Y(v)-11,'text-anchor':'middle',class:'c-val hl'},svg,'best '+yFmt(v))})});
+  notes.forEach(n=>el('text',{x:X(n.x),y:Y(n.y),'text-anchor':'middle',class:'c-note'},svg,n.text));
+}
+function makeTabs(sel,labels,onPick,start=0){const box=$(sel);box.innerHTML='';labels.forEach((l,i)=>{const b=document.createElement('button');b.type='button';b.textContent=l;if(i===start)b.classList.add('on');b.onclick=()=>{$$(sel+' button').forEach(x=>x.classList.remove('on'));b.classList.add('on');onPick(i)};box.appendChild(b)})}
+
+let t2i=0,t3i=0,abi=0,oodi=0;
+function renderT2(){const rows=T2.filter(r=>r[1][t2i]!=null).map(r=>({label:r[0],value:r[1][t2i],hl:r[0]==='Transolver'})).sort((a,b)=>a.value-b.value);
+  hbar($('#t2Chart'),rows);const ts=rows[0],second=rows.find(r=>!r.hl);
+  $('#t2Note').innerHTML=`Transolver <b>${ts.value}</b> vs. second best ${second.label} ${second.value}, i.e. <b>${((1-ts.value/second.value)*100).toFixed(1)}%</b> lower error on ${T2_BENCH[t2i]}.`}
+function renderT3(){const higher=T3_METRICS[t3i][1]==='higher';let rows=T3.filter(r=>r[1][t3i]!=null).map(r=>({label:r[0],value:r[1][t3i],hl:r[0]==='Transolver'}));
+  rows.sort((a,b)=>higher?b.value-a.value:a.value-b.value);
+  hbar($('#t3Chart'),rows,{floor:higher?Math.floor(Math.min(...rows.map(r=>r.value))*20)/20:null});
+  $('#t3Note').innerHTML=higher?`Spearman ρ, <b>higher is better</b>: does the model rank designs in the right order?`:`Relative L2 error, <b>lower is better</b>.`}
+function renderAb(){const b=T2_BENCH[abi],ys=T9[b];const best=ys.indexOf(Math.min(...ys));
+  lineChart($('#abChart'),{xs:T9_M,series:[{ys,cls:'a',best}],hlines:T9_SQ[b]!=null?[{y:T9_SQ[b],label:'regular squares '+T9_SQ[b]}]:[],yFmt:v=>v<0.01?v.toFixed(4):v.toFixed(3),
+    notes:[{x:1,y:ys[0],text:''}]});
+  $('#abNote').innerHTML=`M = 1 (global pooling): <b>${ys[0]}</b>. Best M = <b>${T9_M[best]}</b>: <b>${ys[best]}</b>. M = 1024: ${ys[9]}.${T9_SQ[b]!=null?` Fixed regular squares: ${T9_SQ[b]}.`:' (Elasticity is a point cloud, so regular squares cannot be applied.)'}`}
+function renderAbCost(){lineChart($('#abCost'),{xs:T9_M,series:[{ys:T9_MEM,cls:'b'}],yFmt:v=>v.toFixed(2)+' GB',height:200})}
+function renderRes(){lineChart($('#resChart'),{xs:T10_N,xTickLabels:T10_N.map(n=>n>=1000?Math.round(n/1000)+'k':n),series:[{ys:T10_PT,cls:'g'},{ys:T10_TS,cls:'a'}],yFmt:v=>v.toFixed(3),
+  notes:[{x:19881,y:0.0165,text:'Plain Transformer: out of memory →'}],yMin:0})}
+function renderOOD(){const [lab,dir,col]=T6_METRICS[oodi],higher=dir==='higher';const rows=T6.map(r=>({label:r[0],value:r[1][col],hl:r[0]==='Transolver'})).sort((a,b)=>higher?b.value-a.value:a.value-b.value);
+  hbar($('#oodChart'),rows,{floor:higher?0.75:null})}
+function renderKL(){hbar($('#klChart'),[{label:'Galerkin · Elasticity',value:0.3803},{label:'Transolver · Elasticity',value:1.7795,hl:true},{label:'Galerkin · Darcy',value:0.2739},{label:'Transolver · Darcy',value:1.8274,hl:true}],{decimals:2});
+  const s=$('#klChart svg');if(s){const t=el('text',{x:0,y:-4,class:'c-title'},s,'KL(attention ‖ uniform), higher = sharper');}}
+
+makeTabs('#t2Tabs',T2_BENCH,i=>{t2i=i;renderT2()});
+makeTabs('#t3Tabs',T3_METRICS.map(m=>m[0]),i=>{t3i=i;renderT3()});
+makeTabs('#abTabs',T2_BENCH,i=>{abi=i;renderAb()});
+makeTabs('#oodTabs',T6_METRICS.map(m=>m[0]),i=>{oodi=i;renderOOD()});
+
+/* ===================== math, nav, render ===================== */
+function typeset(node){if(window.renderMathInElement){try{renderMathInElement(node,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})}catch(e){}}}
+function rerenderAll(){renderHero();pgDraw();renderStep();renderArch();renderCode();renderT2();renderT3();renderAb();renderAbCost();renderRes();renderOOD();renderKL()}
+window.addEventListener('load',()=>{typeset(document.body);renderStep()});
+let rzT;window.addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(rerenderAll,150)});
+(function nav(){
+  const links=$$('#tocList a'),mob=$('#mobileNav');links.forEach(a=>{const m=document.createElement('a');m.href=a.getAttribute('href');m.textContent=a.textContent;mob.appendChild(m)});
+  const secs=links.map(a=>document.querySelector(a.getAttribute('href')));
+  const onScroll=()=>{const y=window.scrollY+120;let cur=0;secs.forEach((s,i)=>{if(s&&s.offsetTop<=y)cur=i});links.forEach((a,i)=>a.classList.toggle('active',i===cur));
+    const h=document.documentElement.scrollHeight-window.innerHeight;$('#progress').style.width=(h>0?window.scrollY/h*100:0)+'%'};
+  window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+})();
+rerenderAll();
+</script>
+</body>
+</html>
